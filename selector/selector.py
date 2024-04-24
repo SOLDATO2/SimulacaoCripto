@@ -25,21 +25,31 @@ def receber_informacoes():
         if nova_rota:
             rotas.append(nova_rota)
             print(f'Rotas recebidas: {rotas}')
-            print(f'Relogios recebidos: {relogios}')
+            
         if novo_relogio:
-            relogios.append(time.strptime(novo_relogio, "%H:%M:%S"))
+            relogios.append(novo_relogio)
+            print(f'Relogios recebidos: {relogios}')
 
         # Se recebemos 3 rotas e 3 relógios, calculamos a média dos relógios
         if len(rotas) == 3 and len(relogios) == 3:
-            total_seconds = sum(map(lambda t: t.tm_hour * 3600 + t.tm_min * 60 + t.tm_sec, relogios))
-            media_relogios = time.strftime("%H:%M:%S", time.gmtime(total_seconds / 3))
+            media_seconds = sum(map(lambda t: sum(int(i) * (60 ** index) for index, i in enumerate(reversed(t.split(':')))), relogios)) / len(relogios)
+            media_relogios = time.strftime("%H:%M:%S", time.gmtime(media_seconds))
             print(f'Média dos relógios: {media_relogios}')
 
             # Enviar o novo relógio para cada rota
-            for rota in rotas:
-                response = requests.post(rota + '/receber_novo_relogio', json={'novo_relogio': media_relogios})
+            for rota, relogio in zip(rotas, relogios):
+                diff_seconds = sum(map(lambda t: sum(int(i) * (60 ** index) for index, i in enumerate(reversed(t.split(':')))), [media_relogios])) - sum(map(lambda t: sum(int(i) * (60 ** index) for index, i in enumerate(reversed(t.split(':')))), [relogio]))
+                diff_relogio = time.strftime("%H:%M:%S", time.gmtime(abs(diff_seconds)))  # Use abs() para obter o valor absoluto da diferença
+
+                # Determine se o relógio está adiantado ou atrasado em relação à média
+                if diff_seconds >= 0:
+                    diff_relogio = '+' + diff_relogio  # Se positivo, o relógio está atrasado
+                else:
+                    diff_relogio = '-' + diff_relogio  # Se negativo, o relógio está adiantado
+
+                response = requests.post(rota + '/receber_novo_relogio', json={'diferenca_relogio': diff_relogio})
                 if response.status_code == 200:
-                    print(f'Novo relógio enviado para {rota}')
+                    print(f'Diferença de relógio enviada para {rota}')
 
             # Limpar as listas para receber novos dados
             rotas.clear()

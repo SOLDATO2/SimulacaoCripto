@@ -8,6 +8,8 @@ import requests
 import json
 import time
 
+import threading
+
 def find_available_port():
     """Encontra uma porta disponível."""
     port = 5001  # Porta inicial
@@ -26,6 +28,7 @@ app = Flask(__name__)
 def enviar_dados():
     minha_rota = f'http://localhost:{port}/'  # Obtenha a porta atual do validador.py
     relogio = time.strftime("%H:%M:%S")  # Obtém o horário atual
+    print(relogio)
 
     try:
         response = requests.post('http://localhost:5000/receber_informacoes', json={'rota': minha_rota, 'relogio': relogio})
@@ -39,11 +42,18 @@ def enviar_dados():
         print("Erro de conexão:", e)
         return False
 
+@app.route('/receber_novo_relogio', methods=['POST'])
+def receber_novo_relogio():
+    data = request.json
+    diferenca_relogio = data.get('diferenca_relogio')
+    print("Diferença de relógio recebida:", diferenca_relogio)
+    return "Relógio recebido com sucesso"
+
 if __name__ == '__main__':
     port = find_available_port()
     print(f"Using port: {port}")
 
-    while not enviar_dados():
-        time.sleep(5)  # Espera 5 segundos antes de tentar novamente
-
+    enviar_dados_thread = threading.Thread(target=enviar_dados) #usa multi threading para executar 2 funces ao mesmo tempo
+    enviar_dados_thread.start()
+        
     app.run(host='localhost', port=port)
