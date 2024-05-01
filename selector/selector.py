@@ -8,6 +8,9 @@ import requests
 import json
 import time
 
+
+# Lembrar de substituir esses 2 por um json
+# que irá armazenar essas 2 informações
 rotas = []
 relogios = []
 
@@ -15,7 +18,7 @@ app = Flask(__name__)
 
 @app.route('/receber_informacoes', methods=['GET', 'POST'])
 def receber_informacoes():
-    global rotas, relogios
+    #global rotas, relogios
 
     if request.method == 'POST':
         dados = request.json
@@ -53,11 +56,13 @@ def receber_informacoes():
 
             # Limpar as listas para receber novos dados
             rotas.clear()
+            print("Rotas limpas")
             relogios.clear()
+            print("Relogios limpos")
 
         return "Dados recebidos com sucesso"
 
-    if len(rotas) == 0 and len(relogios) == 0:
+    if len(rotas) == 3 and len(relogios) == 3:
         print("Aguardando dados...")
         return "Aguardando dados..."
     else:
