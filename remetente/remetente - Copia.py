@@ -29,9 +29,9 @@ if __name__ == '__main__':
     
     #Valores apenas representativos
     saldo = 1000
-    id_remetente = "300"
+    id_remetente = "500"
     quantia = 10
-    id_destinatario = "400"
+    id_destinatario = "600"
      
     enviar_dados(id_remetente, quantia, id_destinatario, saldo)
     

@@ -1,5 +1,6 @@
 #validador.py
 from flask import Flask, request
+from quart import Quart, request
 import socket
 import requests
 import time
@@ -67,7 +68,7 @@ def validar_saldo_remetente(saldo_remetente, valor_transacao):
 # próximo minuto devem ser invalidas
 
 registro_qnt_transacoes = {}#armazenar jsons dentro de jsons do remetente
-blacklist = []
+blacklist = {}
 
 id_ref = ""
 #mudar sistema de localizar na lista pois se remover um remetente da lista, o index dele muda
@@ -85,8 +86,13 @@ def verificar_spam_transacoes(remetente):
     id_remetente_in_remetentes = False
     
     if id_ref in registro_qnt_transacoes:
+        print("id_ref existe em registro_qnt_transacoes")
         id_remetente_in_remetentes = True
-        print(f"id {id_ref} existe na fila")
+    elif id_ref in blacklist:
+        print(f"{id_ref} existe em blacklist")
+        id_remetente_in_remetentes = True
+
+  
         
     
     if id_remetente_in_remetentes == False:
@@ -94,15 +100,21 @@ def verificar_spam_transacoes(remetente):
         #{'id_remetente': 0, 'quantia': 10, 'id_destinatario': 1, 'saldo': 1000, 'horario': '18:02:21'}
         
         registro_qnt_transacoes[id_ref] = {
-            "spam": False,
+            "tempoEmFila": 0,
             "transacoes": 100 # se for 101 ele é adicionado a blacklist
         }
-        if id_ref not in blacklist:
-            _thread_verificar_transacoes_thread = threading.Thread(target=verificar_transacoes_thread, args= str(id_ref))
-            _thread_verificar_transacoes_thread.start()
-            print("thread iniciado")
-    else:
+        #if id_ref not in blacklist:
+        #    _thread_verificar_transacoes_thread = threading.Thread(target=verificar_transacoes_thread, args= str(id_ref))
+        #    _thread_verificar_transacoes_thread.start()
+        #    print("thread iniciado")    
+    elif id_ref not in blacklist:
         registro_qnt_transacoes[id_ref]["transacoes"] += 1 
+    #else:
+        #registro_qnt_transacoes[id_ref]["transacoes"] += 1 
+
+
+
+
 
 
 def verificar_transacoes_thread(id_ref):
@@ -123,6 +135,40 @@ def verificar_transacoes_thread(id_ref):
     del registro_qnt_transacoes[id_ref]
     print(f"remetente '{id_ref}' removido da lista de transações")
     
+token_verificar_transacoes = True
+def verificar_transacoes_thread2():
+    global blacklist, token_verificar_transacoes, token_blacklist
+    while True:
+        while(token_verificar_transacoes == False): #aguarda receber o token para fazer qualquer possivel modificacao em blacklist
+            pass
+        #for remetente in registro_qnt_transacoes:
+        for remetente in list(registro_qnt_transacoes.keys()):
+            if registro_qnt_transacoes[remetente]["tempoEmFila"] < 60:
+                if registro_qnt_transacoes[remetente]["transacoes"] > 100:
+                    registro_qnt_transacoes[remetente]["tempoEmFila"] = 0
+                    print(f"Remetente '{remetente}' está sendo adicionado a blacklist")
+                    #remetente_dict = {
+                    #    remetente: registro_qnt_transacoes[remetente]
+                    #}
+                    blacklist[remetente] = registro_qnt_transacoes[remetente]
+                    del registro_qnt_transacoes[remetente]
+                    #break
+                    continue
+                registro_qnt_transacoes[remetente]["tempoEmFila"] += 1 
+                print(f"remetente '{remetente}' fez {registro_qnt_transacoes[remetente]["transacoes"]} transações em {registro_qnt_transacoes[remetente]["tempoEmFila"]}")
+            else:
+                print(f"{registro_qnt_transacoes[remetente]} deletado da fila")
+                print("ANTES***********************")
+                print(registro_qnt_transacoes)
+                print("***********************")
+                del registro_qnt_transacoes[remetente]
+                print("DEPOIS***********************")
+                #break
+                continue
+        token_verificar_transacoes = False
+        token_blacklist = True       
+        time.sleep(1)
+    
 def blacklist_thread(id_ref):
     print(f"Remetente '{id_ref}' está sendo adicionado a blacklist")
     mini_relogio = 0
@@ -131,6 +177,29 @@ def blacklist_thread(id_ref):
         mini_relogio +=1
         print(f"{mini_relogio} segundos restantes para '{id_ref}' ser removido da blacklist")
     blacklist.remove(id_ref)
+    
+token_blacklist = False
+def blacklist_thread2():
+    global token_blacklist, token_verificar_transacoes
+    while(True):
+        while token_blacklist == False: #aguarda receber o token para fazer qualquer possivel modificacao em blacklist
+            pass
+        #for remetente in blacklist:
+        for remetente in list(blacklist.keys()):
+            if blacklist[remetente]["tempoEmFila"] < 60:
+                blacklist[remetente]["tempoEmFila"] += 1
+                print(f"{blacklist[remetente]["tempoEmFila"]} segundos restantes para '{remetente}' ser removido da blacklist")
+            else:
+                del blacklist[remetente]
+                print(f"Remetente {remetente} removido da blacklist")
+                #break
+                continue
+            
+        token_blacklist= False
+        token_verificar_transacoes = True
+        time.sleep(1)
+    
+
         
         
     
@@ -167,7 +236,7 @@ def atualizar_relogio(): # Função para o relógio ficar contando a cada segund
         time.sleep(1)
 
 
-app = Flask(__name__)
+app = Quart(__name__)
 delta_relogio = datetime.timedelta()
 relogio_atual = "sem relogio"        
 
@@ -204,10 +273,8 @@ def validar_job():
     
     
 
-    print("ate aqui funciona 1")
     
     transacao_valida = validar_saldo_remetente(saldo_remetente,valor_transacao)
-    print("ate aqui funciona 2")
     
     print("Resposta validar_saldo_remetente:", transacao_valida)
     if transacao_valida == True:
@@ -224,9 +291,14 @@ def validar_job():
             #de tempo do id ser adicionado a blacklist, retornando um codigo de resposta "1" ao inves de "2"
             #time.sleep está forçando o sistema a esperar os threads estarem em dia. Provavelmente tem uma forma melhor de fazer isso
             #ver depois
+
             time.sleep(1)
+
+
+            
             if remetente["id_remetente"] in blacklist:
                 transacao_valida = False
+            print("STATUS JOB APOS VERIFICAR BLACKLIST ----------->", transacao_valida)
     
     
     if transacao_valida == True:
@@ -320,6 +392,11 @@ if __name__ == '__main__':
     
     definir_id()
     
+    thread_verificar_transacoes_thread = threading.Thread(target=verificar_transacoes_thread2)
+    thread_verificar_transacoes_thread.start()
+    
+    thread_blacklist_thread = threading.Thread(target=blacklist_thread2)
+    thread_blacklist_thread.start()
     
     thread_enviar_dados = threading.Thread(target=enviar_dados)
     thread_enviar_dados.start()
