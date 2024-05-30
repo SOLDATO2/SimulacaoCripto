@@ -1,6 +1,5 @@
 #validador.py
 from flask import Flask, request
-from quart import Quart, request
 import socket
 import requests
 import time
@@ -117,23 +116,7 @@ def verificar_spam_transacoes(remetente):
 
 
 
-def verificar_transacoes_thread(id_ref):
-    global blacklist
-    mini_relogio = 0
-    while(mini_relogio != 60):
-        if registro_qnt_transacoes[id_ref]["transacoes"] > 100:
-            if registro_qnt_transacoes[id_ref] not in blacklist:
-                blacklist.append(id_ref)
-                thread_blacklist_thread = threading.Thread(target=blacklist_thread, args = id_ref)
-                thread_blacklist_thread.start()
-            break
-        else:
-            print(f"remetente '{id_ref}' fez {registro_qnt_transacoes[id_ref]["transacoes"]} transações em {mini_relogio}")
-            
-        mini_relogio += 1
-        time.sleep(1)
-    del registro_qnt_transacoes[id_ref]
-    print(f"remetente '{id_ref}' removido da lista de transações")
+
     
 token_verificar_transacoes = True
 def verificar_transacoes_thread2():
@@ -169,14 +152,6 @@ def verificar_transacoes_thread2():
         token_blacklist = True       
         time.sleep(1)
     
-def blacklist_thread(id_ref):
-    print(f"Remetente '{id_ref}' está sendo adicionado a blacklist")
-    mini_relogio = 0
-    while(mini_relogio != 60):
-        time.sleep(1)
-        mini_relogio +=1
-        print(f"{mini_relogio} segundos restantes para '{id_ref}' ser removido da blacklist")
-    blacklist.remove(id_ref)
     
 token_blacklist = False
 def blacklist_thread2():
@@ -236,7 +211,7 @@ def atualizar_relogio(): # Função para o relógio ficar contando a cada segund
         time.sleep(1)
 
 
-app = Quart(__name__)
+app = Flask(__name__)
 delta_relogio = datetime.timedelta()
 relogio_atual = "sem relogio"        
 
