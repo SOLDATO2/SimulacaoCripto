@@ -5,7 +5,6 @@ import requests
 import time
 import datetime
 import threading
-import asyncio
 
 
 
@@ -310,7 +309,6 @@ def receber_id():
 
     data = request.json
     id_validador = data.get('id_gerado')
-    print("fiz ate onde eu queria")
     print(id_validador)
     return "fiz ate onde eu queria"
     

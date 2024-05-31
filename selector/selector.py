@@ -1,21 +1,18 @@
-import asyncio
 import datetime
-import sqlite3
 import random
 import threading
 import time
 import requests
 from flask import Flask, request, jsonify
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 app = Flask(__name__)
 
-def time_to_seconds(t):  # Função que converte relógio HH:MM:SS para segundos
+def time_to_seconds(t):  
     h, m, s = map(int, t.split(':'))
     return h * 3600 + m * 60 + s
 
-def seconds_to_time(seconds):  # Função que converte segundos para relógio HH:MM:SS
+def seconds_to_time(seconds):
     return time.strftime("%H:%M:%S", time.gmtime(seconds))
 
 
@@ -155,6 +152,7 @@ carteira_generica_selector = 0 #carteira ilustrativa
 aceitado_validadores = False
 job = None
 
+
 @app.route('/receber_job', methods=['POST'])
 def receber_job():
     
@@ -167,8 +165,8 @@ def receber_job():
     if len(Fila_de_espera) < 3: # era pra ser 9
         print("Porem não existem validadores suficientes na fila para validar")
         thread_lifetime_job_thread = threading.Thread(target=thread_lifetime_job)
-        thread_lifetime_job_thread.start()
-    return "Job recebido"
+        thread_lifetime_job_thread.start()   
+    return "Rota acionada"
 
 def thread_lifetime_job():
     global job
@@ -339,7 +337,7 @@ def devolver_informacoes_validadores(lista_validadores):
     print(f'Rotas coletadas da fila: {len(validadores)}')
     
 
-    if len(validadores) == 3: #especificacao do projet diz que tem q ser 9
+    if len(validadores) >= 3: #especificacao do projet diz que tem q ser 9
         
         
         #############################################################################################
@@ -462,8 +460,13 @@ def devolver_informacoes_validadores(lista_validadores):
         
         log = f"Foram escolhidos os seguintes validadores para validar a job do remetente '{job["id_remetente"]}': {lista_validadores}"
         enviar_log_banco(log)   
-        
-        
+        print(validadores_escolhidos)
+        #adicionando validadores que nao foram escolhidos no inicio da fila de espera
+        for validador in lista_validadores:
+            existe = any(dicionario.get("id_validador") == validador["id_validador"] for dicionario in validadores_escolhidos)
+            if not existe:
+                print(f"validador {validador['id_validador']} não foi escolhido, portanto irá ser inserido no início da fila novamente")
+                Fila_de_espera.insert(0, validador)
         
         
         #mandar job para validadores escolhidos
@@ -480,7 +483,8 @@ def devolver_informacoes_validadores(lista_validadores):
                     print("Tentando novamente...")
         
         log = f"A job do remetente '{job["id_remetente"]}' foi enviada para os seguintes validadores: {lista_validadores}"
-        enviar_log_banco(log)              
+        enviar_log_banco(log)
+                 
         
         
         
@@ -493,41 +497,41 @@ def devolver_informacoes_validadores(lista_validadores):
 
 #manager de fila
 def verificar_fila():
-    global min_qnt_validadores_atingida
-    min_qnt_validadores_atingida = False #valor padrao
+    global min_qnt_validadores_atingida, aceitado_validadores
+    min_qnt_validadores_atingida = False
     while True:
         if aceitado_validadores == True:
             if len(Fila_de_espera) >= 3:
                 min_qnt_validadores_atingida = True
                 print("Fila de espera validadores possui o minimo de validadores para validar!")
-                x = 3
-                while(x > 0):
+                x = len(Fila_de_espera)
+                max = 0
+                while(x > 0 and max < 5):
                     validadors_que_sairam_da_fila.append(Fila_de_espera[0])
                     Fila_de_espera.pop(0)
                     x -=1
+                    max +=1
                 print("Validadores que sairam da fila", validadors_que_sairam_da_fila)
+                if len(validadors_que_sairam_da_fila) >= 3:
+                    for validador in validadors_que_sairam_da_fila:
+                        ids_validadores_selecionados.append(validador["id_validador"])
+                    
+                    aceitado_validadores = False
+                        
+                    devolver_informacoes_validadores(validadors_que_sairam_da_fila)
+                    validadors_que_sairam_da_fila.clear()
+                
 
 ids_validadores_selecionados = []
-def devolver_informacoes():
-    global aceitado_validadores
-    while True:
-        if len(validadors_que_sairam_da_fila) >= 3:
-            for validador in validadors_que_sairam_da_fila:
-                ids_validadores_selecionados.append(validador["id_validador"])
-            
-            aceitado_validadores = False
-                
-            devolver_informacoes_validadores(validadors_que_sairam_da_fila)
-            validadors_que_sairam_da_fila.clear()
+
             
             
 delta_relogio = datetime.timedelta()
 relogio_atual = "sem relogio" 
-def atualizar_relogio(): # Função para o relógio ficar contando a cada segundo (passando o tempo no terminal)
+def atualizar_relogio():
     global relogio_atual, delta_relogio
     while True:
         relogio_atual = (datetime.datetime.now() + delta_relogio).strftime("%H:%M:%S")
-        #print(relogio_atual)
         time.sleep(1)
 
 
@@ -540,8 +544,6 @@ if __name__ == '__main__':
     thread_verificar_fila = threading.Thread(target=verificar_fila)
     thread_verificar_fila.start()
     
-    thread_devolver_informacoes = threading.Thread(target=devolver_informacoes)
-    thread_devolver_informacoes.start()
     
     
     app.run(host='127.0.0.1', port=5001) 
