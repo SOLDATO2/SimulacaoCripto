@@ -3,7 +3,8 @@ from flask import Flask, request
 import socket
 import requests
 import time
-import datetime
+from datetime import datetime, timedelta
+
 import threading
 
 
@@ -68,12 +69,10 @@ def validar_saldo_remetente(saldo_remetente, valor_transacao):
 registro_qnt_transacoes = {}#armazenar jsons dentro de jsons do remetente
 blacklist = {}
 
-id_ref = ""
+
 #mudar sistema de localizar na lista pois se remover um remetente da lista, o index dele muda
 def verificar_spam_transacoes(remetente):
-    
     global registro_qnt_transacoes
-    global id_ref
     
     
     id_ref = remetente["id_remetente"]
@@ -81,34 +80,79 @@ def verificar_spam_transacoes(remetente):
     
     #verifica se remetente existe no registro_qnt_transacoes
     #Por padrao assume que nao 
-    id_remetente_in_remetentes = False
     
     if id_ref in registro_qnt_transacoes:
         print("id_ref existe em registro_qnt_transacoes")
-        id_remetente_in_remetentes = True
-    elif id_ref in blacklist:
-        print(f"{id_ref} existe em blacklist")
-        id_remetente_in_remetentes = True
-
-  
-        
-    
-    if id_remetente_in_remetentes == False:
-
+    else:
         #{'id_remetente': 0, 'quantia': 10, 'id_destinatario': 1, 'saldo': 1000, 'horario': '18:02:21'}
-        
         registro_qnt_transacoes[id_ref] = {
-            "tempoEmFila": 0,
-            "transacoes": 100 # se for 101 ele é adicionado a blacklist
+            "transacoes": 99, # se for 101 ele é marcado como spam
+            "horarioPrimeiroRegistroTransacao": relogio_atual,
+            "spam": False,
+            "horarioMarcadoComoSpam": None
         }
-        #if id_ref not in blacklist:
-        #    _thread_verificar_transacoes_thread = threading.Thread(target=verificar_transacoes_thread, args= str(id_ref))
-        #    _thread_verificar_transacoes_thread.start()
-        #    print("thread iniciado")    
-    elif id_ref not in blacklist:
-        registro_qnt_transacoes[id_ref]["transacoes"] += 1 
-    #else:
-        #registro_qnt_transacoes[id_ref]["transacoes"] += 1 
+
+    horario_transacao = datetime.strptime(registro_qnt_transacoes[id_ref]["horarioPrimeiroRegistroTransacao"], '%H:%M:%S')
+    horario_atual = datetime.strptime(relogio_atual, '%H:%M:%S')
+    diferenca_tempo = (horario_atual - horario_transacao).total_seconds()
+
+
+
+
+
+
+    if registro_qnt_transacoes[id_ref]["horarioMarcadoComoSpam"] != None:
+        horario_ultimo_spam = datetime.strptime(registro_qnt_transacoes[id_ref]["horarioMarcadoComoSpam"], '%H:%M:%S')
+        diferenca_tempo_ultimo_spam = (horario_atual - horario_ultimo_spam).total_seconds()
+        if diferenca_tempo_ultimo_spam > 60:
+            registro_qnt_transacoes[id_ref]["horarioMarcadoComoSpam"] = None
+            registro_qnt_transacoes[id_ref]["transacoes"] = 1
+            registro_qnt_transacoes[id_ref]["spam"] = False
+    
+    if diferenca_tempo < 60:
+        registro_qnt_transacoes[id_ref]["transacoes"] += 1
+    else:
+        registro_qnt_transacoes[id_ref]["transacoes"] = 1
+        registro_qnt_transacoes[id_ref]["horarioPrimeiroRegistroTransacao"] = remetente["horario"]
+        
+    if registro_qnt_transacoes[id_ref]["transacoes"] > 100:
+            registro_qnt_transacoes[id_ref]["horarioMarcadoComoSpam"] = relogio_atual
+            registro_qnt_transacoes[id_ref]["spam"] = True
+            print("Remetente marcado como spam")
+    #######################################################
+    
+    
+    if registro_qnt_transacoes[id_ref]["spam"] == True:
+        return False
+    else:
+        return True
+    
+
+    
+    
+    
+    
+def validar_transacao(remetente):
+    
+    saldo_remetente = remetente["saldo"]
+    valor_transacao = remetente["quantia"]
+    horario_job = remetente["horario"]
+
+    #validar saldo + taxas
+    if validar_saldo_remetente(saldo_remetente, valor_transacao) == False:
+        print("saldo nao validado")
+        return False
+    if validar_horario_ultima_transcao(horario_job) == False:
+        print("Horario nao validado")
+        return False
+    if verificar_spam_transacoes(remetente) == False:
+        print("Remetente está marcado como spam")
+        return False
+    return True
+    
+    
+       
+    
 
 
 
@@ -205,13 +249,13 @@ def definir_id():
 def atualizar_relogio(): # Função para o relógio ficar contando a cada segundo (passando o tempo no terminal)
     global relogio_atual, delta_relogio
     while True:
-        relogio_atual = (datetime.datetime.now() + delta_relogio).strftime("%H:%M:%S")
+        relogio_atual = (datetime.now() + delta_relogio).strftime("%H:%M:%S")
         #print(relogio_atual)
         time.sleep(1)
 
 
 app = Flask(__name__)
-delta_relogio = datetime.timedelta()
+delta_relogio = timedelta()
 relogio_atual = "sem relogio"        
 
 def enviar_status_aprovacao(id_validador, status_aprovacao):
@@ -233,47 +277,12 @@ def validar_job():
     global status_aprovacao
     #assume que é false e ao decorrer das verificações pode ficar true
     transacao_valida = False
-    
     data = request.json
-    
-    
     remetente = data
             
 
     
-    saldo_remetente = remetente["saldo"]
-    valor_transacao = remetente["quantia"]
-    horario_job = remetente["horario"]
-    
-    
-
-    
-    transacao_valida = validar_saldo_remetente(saldo_remetente,valor_transacao)
-    
-    print("Resposta validar_saldo_remetente:", transacao_valida)
-    if transacao_valida == True:
-        transacao_valida = validar_horario_ultima_transcao(horario_job)
-        print("Resposta validar_horario_ultima_transcao:", transacao_valida)
-        if transacao_valida == True:
-            #verifica se o remetente é spam
-            verificar_spam_transacoes(remetente)
-            
-            print("Print executado antes de verificar se é spam->",registro_qnt_transacoes)
-
-            #sleep necessario pois caso o remetente tenha 100 transações e esse seja a transação 101
-            #Ao iniciar o thread verificar_spam_transacoes, ele continua executando a proxima linha, o que não permite com que 
-            #de tempo do id ser adicionado a blacklist, retornando um codigo de resposta "1" ao inves de "2"
-            #time.sleep está forçando o sistema a esperar os threads estarem em dia. Provavelmente tem uma forma melhor de fazer isso
-            #ver depois
-
-            time.sleep(1)
-
-
-            
-            if remetente["id_remetente"] in blacklist:
-                transacao_valida = False
-            print("STATUS JOB APOS VERIFICAR BLACKLIST ----------->", transacao_valida)
-    
+    transacao_valida = validar_transacao(remetente)
     
     if transacao_valida == True:
         status_aprovacao = 1
@@ -327,7 +336,7 @@ def receber_novo_relogio():
     sinal = tempo_recebido[0]
     tempo = tempo_recebido[1:]
     horas, minutos, segundos = map(int, tempo.split(':'))
-    delta = datetime.timedelta(hours=horas, minutes=minutos, seconds=segundos)
+    delta = timedelta(hours=horas, minutes=minutos, seconds=segundos)
     if sinal == '+':
         delta_relogio += delta
     elif sinal == '-':
@@ -365,11 +374,11 @@ if __name__ == '__main__':
     
     definir_id()
     
-    thread_verificar_transacoes_thread = threading.Thread(target=verificar_transacoes_thread2)
-    thread_verificar_transacoes_thread.start()
+    #thread_verificar_transacoes_thread = threading.Thread(target=verificar_transacoes_thread2)
+    #thread_verificar_transacoes_thread.start()
     
-    thread_blacklist_thread = threading.Thread(target=blacklist_thread2)
-    thread_blacklist_thread.start()
+    #thread_blacklist_thread = threading.Thread(target=blacklist_thread2)
+    #thread_blacklist_thread.start()
     
     thread_enviar_dados = threading.Thread(target=enviar_dados)
     thread_enviar_dados.start()

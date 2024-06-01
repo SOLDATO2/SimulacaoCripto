@@ -344,7 +344,7 @@ def devolver_informacoes_validadores(lista_validadores):
         #sync inicial de relogios dos seletores e validadores utilizando o relogio do servidor(banco)
         while True:
                 try:
-                    response = requests.get("http://127.0.0.1:5000/obter_relogio")
+                    response = requests.get("http://127.0.0.1:5000/obter_relogio") # rota para pegar relogio do banco
                     if response.status_code == 200:
                         
                         #substitui relogio seletor pelo do servidor
@@ -514,6 +514,7 @@ def verificar_fila():
                 print("Validadores que sairam da fila", validadors_que_sairam_da_fila)
                 if len(validadors_que_sairam_da_fila) >= 3:
                     for validador in validadors_que_sairam_da_fila:
+                        #guarda ids para verificar se o id existe no banco ao receber a resposta da validacao 
                         ids_validadores_selecionados.append(validador["id_validador"])
                     
                     aceitado_validadores = False
